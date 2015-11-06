@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<wsdl:definitions xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+	xmlns:tns="http://www.genia.org/RSSNews/" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+	xmlns:xsd="http://www.w3.org/2001/XMLSchema" name="RSSNews"
+	targetNamespace="http://www.genia.org/RSSNews/" xmlns:p="http://schemas.xmlsoap.org/wsdl/http/">
+	<wsdl:types>
+		<xsd:schema targetNamespace="http://www.genia.org/RSSNews/"
+			xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+			<xsd:element name="getFreshNews" type="tns:getFreshNews">
+
+			</xsd:element>
+			<xsd:element name="getFreshNewsResponse" type="tns:getFreshNewsResponse">
+
+			</xsd:element>
+
+			<xsd:complexType name="getFreshNewsResponse">
+				<xsd:sequence>
+					<xsd:element name="NewsItem" type="tns:NewsItem"
+						maxOccurs="unbounded" minOccurs="0">
+					</xsd:element>
+				</xsd:sequence>
+			</xsd:complexType>
+
+			<xsd:complexType name="NewsItem">
+
+				<xsd:sequence>
+
+					<xsd:element name="title" type="xsd:string"></xsd:element>
+					<xsd:element name="description" type="xsd:string"></xsd:element>
+
+					<xsd:element name="date" type="xsd:date"></xsd:element>
+					<xsd:element name="url" type="xsd:string"></xsd:element>
+				</xsd:sequence>
+			</xsd:complexType>
+
+			<xsd:complexType name="getFreshNews">
+				<xsd:sequence>
+
+					<xsd:element name="str" type="xsd:string"></xsd:element>
+				</xsd:sequence>
+			</xsd:complexType>
+			<xsd:complexType name="NewsList">
+				<xsd:sequence>
+					<xsd:element name="NewsItem" type="tns:NewsItem" maxOccurs="unbounded" minOccurs="0"></xsd:element>
+				</xsd:sequence>
+			</xsd:complexType>
+		</xsd:schema>
+	</wsdl:types>
+	<wsdl:message name="getFreshNewsRequest">
+	</wsdl:message>
+	<wsdl:message name="getFreshNewsResponse">
+		<wsdl:part name="out" type="tns:NewsList"/>
+	</wsdl:message>
+	<wsdl:portType name="RSSNewsService">
+		<wsdl:operation name="getFreshNews">
+			<wsdl:input message="tns:getFreshNewsRequest" name="getFreshNews"/>
+			<wsdl:output message="tns:getFreshNewsResponse" name="getFreshNewsResponse"/>
+		</wsdl:operation>
+	</wsdl:portType>
+	<wsdl:binding name="RSSNewsSOAP" type="tns:RSSNewsService">
+		<soap:binding style="document"
+			transport="http://schemas.xmlsoap.org/soap/http" />
+		<wsdl:operation name="getFreshNews">
+			<soap:operation soapAction="http://www.genia.org/RSSNews/getFreshNews" />
+			<wsdl:input name="getFreshNews">
+				<soap:body use="literal" />
+			</wsdl:input>
+			<wsdl:output name="getFreshNewsResponse">
+				<soap:body use="literal" />
+			</wsdl:output>
+		</wsdl:operation>
+	</wsdl:binding>
+	<wsdl:service name="RSSNews">
+		<wsdl:port binding="tns:RSSNewsSOAP" name="RSSNewsSOAP">
+			<soap:address location="http://localhost:9000/RssNewsSOAP/" />
+		</wsdl:port>
+	</wsdl:service>
+</wsdl:definitions>

@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:camel="http://camel.apache.org/schema/spring"
+	xmlns:cxf="http://camel.apache.org/schema/cxf" xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+	xmlns:jpa="http://www.springframework.org/schema/data/jpa"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans 
+      		http://www.springframework.org/schema/beans/spring-beans-2.5.xsd
+      		http://camel.apache.org/schema/spring 
+			http://camel.apache.org/schema/spring/camel-spring.xsd
+			http://www.springframework.org/schema/jdbc 
+  			http://www.springframework.org/schema/jdbc/spring-jdbc.xsd
+  			http://camel.apache.org/schema/cxf
+			http://camel.apache.org/schema/cxf/camel-cxf.xsd
+			http://www.springframework.org/schema/data/jpa
+     		http://www.springframework.org/schema/data/jpa/spring-jpa.xsd">
+
+	<bean id="abstractLoggingInterceptor" abstract="true">
+		<property name="prettyLogging" value="true" />
+	</bean>
+	<bean id="loggingInInterceptor" class="org.apache.cxf.interceptor.LoggingInInterceptor"
+		parent="abstractLoggingInterceptor" />
+	<bean id="loggingOutInterceptor" class="org.apache.cxf.interceptor.LoggingOutInterceptor"
+		parent="abstractLoggingInterceptor" />
+
+
+
+	<cxf:cxfEndpoint id="rssNewsServiceEndpoint"
+		address="http://localhost:9000/RssNewsSOAP/" serviceClass="org.example.rssnews.RSSNewsService">
+		<cxf:inInterceptors>
+			<ref bean="loggingInInterceptor" />
+		</cxf:inInterceptors>
+		<cxf:outInterceptors>
+			<ref bean="loggingOutInterceptor" />
+		</cxf:outInterceptors>
+	</cxf:cxfEndpoint>
+
+	<bean id="RSSNewsService" class="com.genia.cameltest.server.RSSNewsServiceImpl" />
+	<bean id="msgToObj" class="com.genia.cameltest.MessageToItem" />
+	<bean id="utils" class="com.genia.cameltest.MsgUtils" />
+	<bean id="aggregationStrategy" class="com.genia.cameltest.Aggregator" />
+	<bean id="rssProcessor" class="com.genia.cameltest.server.RssProcessor">
+		<property name="rssService" ref="RSSNewsService" />
+	</bean>
+
+	<!-- JMS definition -->
+
+	<bean id="jms" class="org.apache.camel.component.jms.JmsComponent">
+		<property name="configuration" ref="jmsConfig" />
+	</bean>
+
+	<bean id="jmsConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+		<property name="brokerURL"
+			value="vm://localhost?broker.persistent=false&amp;broker.useJmx=false" />
+	</bean>
+
+	<bean id="jmsConfig" class="org.apache.camel.component.jms.JmsConfiguration">
+		<property name="connectionFactory" ref="jmsConnectionFactory" />
+		<property name="transacted" value="true" />
+		<property name="cacheLevelName" value="CACHE_CONNECTION" />
+	</bean>
+
+	<!-- Database configuration -->
+
+	<bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource">
+		<property name="driverClassName" value="com.mysql.jdbc.Driver" />
+		<property name="url" value="jdbc:mysql://localhost/camel_news" />
+		<property name="username" value="test" />
+		<property name="password" value="test" />
+	</bean>
+
+	<!-- JPA configuration -->
+
+	<jpa:repositories base-package="com.genia.cameltest" />
+
+	<bean id="entityManagerFactory"
+		class="org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean">
+		<property name="packagesToScan" value="com.genia.cameltest" />
+		<property name="dataSource" ref="dataSource" />
+		<property name="persistenceUnitName" value="News" />
+		<property name="jpaDialect">
+			<bean class="org.springframework.orm.jpa.vendor.HibernateJpaDialect" />
+		</property>
+		<property name="jpaVendorAdapter">
+			<bean class="org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter">
+				<property name="showSql" value="false" />
+				<property name="generateDdl" value="true" />
+				<property name="database" value="MYSQL" />
+
+			</bean>
+		</property>
+	</bean>
+
+	<bean id="transactionManager" class="org.springframework.orm.jpa.JpaTransactionManager">
+		<property name="entityManagerFactory" ref="entityManagerFactory" />
+	</bean>
+
+	<bean id="jpa" class="org.apache.camel.component.jpa.JpaComponent">
+		<property name="entityManagerFactory" ref="entityManagerFactory" />
+		<property name="transactionManager" ref="transactionManager" />
+	</bean>
+
+	<!-- Enable autowiring -->
+
+	<bean
+		class="org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor" />
+
+	<!-- Registering converters -->
+
+	<bean id="conversionService"
+		class="org.springframework.context.support.ConversionServiceFactoryBean">
+		<property name="converters">
+			<set>
+				<bean class="com.genia.cameltest.converter.EntityToNewsItem" />
+				<bean class="com.genia.cameltest.converter.NewsItemToEntity" />
+			</set>
+		</property>
+	</bean>
+
+	<bean id="camelTypeConverters" class="com.genia.cameltest.converter.CamelTypeConverters" />
+
+	<!-- Camel context -->
+
+	<camelContext xmlns="http://camel.apache.org/schema/spring"
+		errorHandlerRef="globalErrorHandler">
+		<errorHandler id="globalErrorHandler" type="DefaultErrorHandler">
+			<redeliveryPolicy maximumRedeliveries="3"
+				retryAttemptedLogLevel="WARN" backOffMultiplier="2"
+				useExponentialBackOff="true" />
+		</errorHandler>
+
+		<errorHandler id="deadLetter" type="DeadLetterChannel"
+			deadLetterUri="jms:dead">
+			<redeliveryPolicy maximumRedeliveries="3"
+				redeliveryDelay="500" retryAttemptedLogLevel="INFO"
+				backOffMultiplier="2" useExponentialBackOff="true" />
+		</errorHandler>
+
+		<route>
+			<from uri="cxf:bean:rssNewsServiceEndpoint" />
+			<process ref="rssProcessor" />
+		</route>
+
+		<route>
+			<from uri="timer:check?period=1h" />
+			<to uri="jetty:http://k.img.com.ua/rss/ru/kyiv.xml" />
+			<split>
+				<xpath>/rss/channel/item</xpath>
+				<to uri="jms:items" />
+			</split>
+		</route>
+
+		<route>
+			<from uri="jms:items" />
+			<setHeader headerName="pubDate">
+				<xpath>/item/pubDate/text()</xpath>
+			</setHeader>
+			<setHeader headerName="newsTitle">
+				<xpath>/item/title/text()</xpath>
+			</setHeader>
+
+			<process ref="msgToObj" />
+			<to uri="direct:db" />
+			<to uri="direct:email" />
+
+		</route>
+
+		<route>
+			<from uri="direct:email" />
+			<aggregate strategyRef="aggregationStrategy"
+				completionTimeout="3000">
+				<correlationExpression>
+					<constant>true</constant>
+				</correlationExpression>
+				<log message="${header.toSendIds}" />
+				<to
+					uri="smtps://smtp.gmail.com?username=es.terminchecker&amp;password=SendTermin&amp;to=genia.sushko@gmail.com" />
+				<bean ref="utils" method="updateStatus" />
+			</aggregate>
+		</route>
+
+		<route errorHandlerRef="deadLetter">
+			<from uri="direct:db" />
+			<bean ref="utils" method="checkExistance" />
+			<choice>
+				<when>
+					<simple>${header.persist}</simple>
+					<to uri="jpa:com.genia.cameltest.NewsEntity" />
+				</when>
+			</choice>
+		</route>
+
+	</camelContext>
+
+</beans>
